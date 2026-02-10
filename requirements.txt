@@ -1,0 +1,9 @@
+google-generativeai
+python-dotenv
+rich
+numpy
+flask
+SpeechRecognition
+pyaudio
+pvporcupine
+pvrecorder
