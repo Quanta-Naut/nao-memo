@@ -119,6 +119,84 @@ class MemoryApp:
             if store_result['stored']:
                 console.print(f"[dim italic green]Memory stored: {store_result['reason']}[/dim italic green]")
 
+    def train_retriever_flow(self):
+        """Trains the contrastive retriever on stored memories."""
+        console.print("[bold magenta]Train Contrastive Retriever[/bold magenta]\n")
+
+        # Check memory count
+        mem_count = self.memory_manager.storage_service.get_memory_count()
+        console.print(f"Stored memories: [cyan]{mem_count}[/cyan]")
+
+        if mem_count < 5:
+            console.print("[red]Need at least 5 memories to train. Add more memories first.[/red]")
+            Prompt.ask("\nPress Enter to return")
+            return
+
+        trainer = self.memory_manager.contrastive_trainer
+        if trainer is None or trainer.model is None:
+            console.print("[red]sentence-transformers not installed. Run: pip install sentence-transformers[/red]")
+            Prompt.ask("\nPress Enter to return")
+            return
+
+        is_retrain = trainer.is_trained()
+        if is_retrain:
+            console.print("[yellow]Existing model found — will warm-start from previous checkpoint.[/yellow]")
+        else:
+            console.print("[green]First training — starting from base MiniLM model.[/green]")
+
+        # Step 1: Generate triplets
+        console.print("\n[bold yellow]Step 1: Generating training triplets...[/bold yellow]")
+        from src.services.triplet_service import TripletService
+        triplet_service = TripletService(self.memory_manager.llm_service, self.memory_manager.embedding_service)
+
+        memories = self.memory_manager.storage_service.get_all_memories()
+        with console.status(f"[bold blue]Asking LLM to generate queries for {len(memories)} memories...[/bold blue]"):
+            triplets = triplet_service.generate_triplets(memories, num_queries_per_memory=2)
+
+        if len(triplets) < 3:
+            console.print("[red]Not enough triplets generated. Try adding more diverse memories.[/red]")
+            Prompt.ask("\nPress Enter to return")
+            return
+
+        console.print(f"Generated [cyan]{len(triplets)}[/cyan] training triplets.")
+
+        # Show a few examples
+        table = Table(title="Sample Triplets", show_lines=True)
+        table.add_column("Query", style="green", max_width=30)
+        table.add_column("Positive", style="cyan", max_width=30)
+        table.add_column("Negative", style="red", max_width=30)
+        for t in triplets[:3]:
+            table.add_row(t["query"], t["positive"], t["negative"])
+        console.print(table)
+
+        # Step 2: Train
+        console.print("\n[bold yellow]Step 2: Training contrastive model...[/bold yellow]")
+        with console.status("[bold blue]Fine-tuning MiniLM with TripletLoss...[/bold blue]"):
+            metrics = trainer.train(triplets, epochs=3, batch_size=16)
+
+        if "error" in metrics:
+            console.print(f"[red]Training failed: {metrics['error']}[/red]")
+            Prompt.ask("\nPress Enter to return")
+            return
+
+        console.print(Panel(
+            f"Model version: [cyan]v{metrics['model_version']}[/cyan]\n"
+            f"Training time: [cyan]{metrics['duration_seconds']}s[/cyan]\n"
+            f"Triplets used: [cyan]{metrics['num_triplets']}[/cyan]\n"
+            f"Saved to: [dim]{metrics['model_path']}[/dim]",
+            title="Training Complete", border_style="green"
+        ))
+
+        # Step 3: Re-embed all memories
+        console.print("\n[bold yellow]Step 3: Re-embedding all memories...[/bold yellow]")
+        with console.status("[bold blue]Encoding memories with fine-tuned model...[/bold blue]"):
+            count = trainer.reembed_all(self.memory_manager.storage_service)
+
+        console.print(f"[green]Re-embedded {count} memories with the fine-tuned model.[/green]")
+        console.print("\n[bold green]Retriever is now active! Future searches will use the learned model.[/bold green]")
+
+        Prompt.ask("\nPress Enter to return")
+
     def run(self):
         while True:
             self.display_header()
@@ -129,10 +207,11 @@ class MemoryApp:
             menu_table.add_row("2", "Search Memories")
             menu_table.add_row("3", "Chat with Memory")
             menu_table.add_row("4", "Voice Chat")
-            menu_table.add_row("5", "Exit")
+            menu_table.add_row("5", "Train Retriever (Contrastive Learning)")
+            menu_table.add_row("6", "Exit")
             console.print(menu_table)
             
-            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5"], default="1")
+            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6"], default="1")
 
             if choice == "1":
                 self.add_memory_flow()
@@ -143,6 +222,8 @@ class MemoryApp:
             elif choice == "4":
                 self.voice_chat_flow()
             elif choice == "5":
+                self.train_retriever_flow()
+            elif choice == "6":
                 console.print("[bold green]Goodbye![/bold green]")
                 break
 

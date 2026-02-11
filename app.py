@@ -58,19 +58,86 @@ def search_memory():
 def chat():
     """
     Endpoint to chat with the LLM.
-    Payload: {"message": "What do I like?"}
+    Payload: {"text": "What do I like?"}
     """
     data = request.json
-    if not data or 'message' not in data:
-        return jsonify({"error": "Missing 'message' in payload"}), 400
+    if not data or 'text' not in data:
+        return jsonify({"error": "Missing 'text' in payload"}), 400
     
-    user_message = data['message']
+    user_message = data['text']
     response, store_result = chat_service.chat(user_message)
     
     return jsonify({
         "response": response,
         "memory_action": store_result
     })
+
+@app.route('/train', methods=['POST'])
+def train_retriever():
+    """
+    Endpoint to trigger contrastive learning training.
+    Optional payload: {"epochs": 3, "queries_per_memory": 2}
+    """
+    trainer = memory_manager.contrastive_trainer
+    if trainer is None or trainer.model is None:
+        return jsonify({"error": "sentence-transformers not installed. Run: pip install sentence-transformers"}), 500
+
+    data = request.json or {}
+    epochs = data.get("epochs", 3)
+    queries_per_memory = data.get("queries_per_memory", 2)
+
+    # Check memory count
+    mem_count = memory_manager.storage_service.get_memory_count()
+    if mem_count < 5:
+        return jsonify({"error": f"Need at least 5 memories to train. Currently have {mem_count}."}), 400
+
+    # Step 1: Generate triplets
+    from src.services.triplet_service import TripletService
+    triplet_service = TripletService(memory_manager.llm_service, memory_manager.embedding_service)
+    memories = memory_manager.storage_service.get_all_memories()
+    triplets = triplet_service.generate_triplets(memories, num_queries_per_memory=queries_per_memory)
+
+    if len(triplets) < 3:
+        return jsonify({"error": "Not enough triplets generated. Add more diverse memories."}), 400
+
+    # Step 2: Train
+    metrics = trainer.train(triplets, epochs=epochs, batch_size=16)
+    if "error" in metrics:
+        return jsonify({"error": metrics["error"]}), 500
+
+    # Step 3: Re-embed all memories
+    reembedded = trainer.reembed_all(memory_manager.storage_service)
+    metrics["memories_reembedded"] = reembedded
+
+    return jsonify(metrics)
+
+@app.route('/train/status', methods=['GET'])
+def train_status():
+    """
+    Endpoint to check the status of the contrastive retriever.
+    """
+    trainer = memory_manager.contrastive_trainer
+    if trainer is None or trainer.model is None:
+        return jsonify({"available": False, "reason": "sentence-transformers not installed"})
+
+    import os, json
+    status = {
+        "available": True,
+        "is_trained": trainer.is_trained(),
+        "memory_count": memory_manager.storage_service.get_memory_count(),
+    }
+
+    # Load training log if it exists
+    log_path = os.path.join(trainer.model_dir, "training_log.json")
+    if os.path.exists(log_path):
+        with open(log_path, 'r') as f:
+            log = json.load(f)
+        if log.get("runs"):
+            latest = log["runs"][-1]
+            status["latest_training"] = latest
+            status["total_versions"] = len(log["runs"])
+
+    return jsonify(status)
 
 if __name__ == '__main__':
     # Run on port 5000 by default

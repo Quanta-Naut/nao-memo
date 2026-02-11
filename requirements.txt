@@ -7,3 +7,5 @@ SpeechRecognition
 pyaudio
 pvporcupine
 pvrecorder
+sentence-transformers
+torch
