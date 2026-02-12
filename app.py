@@ -8,7 +8,7 @@ app = Flask(__name__)
 # Initialize services
 # Note: In production, consider using a factory pattern or dependency injection
 memory_manager = MemoryManager()
-chat_service = ChatService()
+chat_service = ChatService(memory_manager=memory_manager)
 
 @app.route('/health', methods=['GET'])
 def health_check():

@@ -15,7 +15,7 @@ console = Console()
 class MemoryApp:
     def __init__(self):
         self.memory_manager = MemoryManager()
-        self.chat_service = ChatService()
+        self.chat_service = ChatService(memory_manager=self.memory_manager)
         self.stt_service = STTService()
         self.wakeword_service = WakeWordService()
 

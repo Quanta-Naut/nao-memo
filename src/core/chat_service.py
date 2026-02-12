@@ -2,8 +2,8 @@ from src.core.memory_manager import MemoryManager
 from src.services.llm_service import LLMService
 
 class ChatService:
-    def __init__(self):
-        self.memory_manager = MemoryManager()
+    def __init__(self, memory_manager: MemoryManager = None):
+        self.memory_manager = memory_manager or MemoryManager()
         self.llm_service = LLMService()
 
     def chat(self, user_input: str) -> str:
@@ -16,8 +16,9 @@ class ChatService:
         # We retrieve top 3 memories to keep context focused
         results = self.memory_manager.search_memory(user_input, limit=3)
         
-        # Extract just the text from the top results, filtering by a relevance threshold if desired
-        context = [result[0].text for result in results if result[1] > 0.6]
+        # Extract just the text from the top results, filtering by a relevance threshold
+        # Note: Learned embeddings (384-dim) may produce different score ranges than Gemini (768-dim)
+        context = [result[0].text for result in results if result[1] > 0.3]
 
         # 2. Parallel: Check if this new input should be stored as memory
         # In a real app, this should be async to not block the chat response
