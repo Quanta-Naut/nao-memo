@@ -82,8 +82,28 @@ class ContrastiveTrainer:
         # Define loss
         train_loss = losses.TripletLoss(model=self.model)
 
+        # Create evaluator to measure "accuracy" (how often pos > neg)
+        from sentence_transformers.evaluation import TripletEvaluator
+        # Use a subset for evaluation to save time, or full set if small
+        eval_triplets = triplets[:100] 
+        evaluator = TripletEvaluator(
+            anchors=[t["query"] for t in eval_triplets],
+            positives=[t["positive"] for t in eval_triplets],
+            negatives=[t["negative"] for t in eval_triplets],
+            name="train_eval"
+        )
+
+        # Measure initial accuracy
+        initial_metrics = evaluator(self.model)
+        # TripletEvaluator returns accuracy in 'test_accuracy' key usually, but let's check return
+        # Actually evaluator(model) returns correct score (accuracy) directly in recent versions
+        # or we can inspect evaluator.compute_metrices(model)
+        # Let's rely on the return value which is the primary metric (accuracy)
+        initial_accuracy = initial_metrics
+
         # Train
         logger.info(f"Starting training: {len(triplets)} triplets, {epochs} epochs")
+        logger.info(f"Initial Triplet Accuracy: {initial_accuracy:.4f}")
 
         warmup_steps = int(len(train_dataloader) * epochs * 0.1)
 
@@ -96,6 +116,10 @@ class ContrastiveTrainer:
         )
 
         duration = (datetime.now() - start_time).total_seconds()
+        
+        # Measure final accuracy
+        final_accuracy = evaluator(self.model)
+        logger.info(f"Final Triplet Accuracy: {final_accuracy:.4f}")
 
         # Load training log and update
         learning_rate = 2e-5 # Default for SentenceTransformer
@@ -105,7 +129,9 @@ class ContrastiveTrainer:
             batch_size=batch_size,
             memory_count=memory_count,
             duration=duration,
-            learning_rate=learning_rate
+            learning_rate=learning_rate,
+            initial_accuracy=initial_accuracy,
+            final_accuracy=final_accuracy
         )
 
         metrics = {
@@ -115,6 +141,8 @@ class ContrastiveTrainer:
             "batch_size": batch_size,
             "memory_count": memory_count,
             "learning_rate": learning_rate,
+            "initial_accuracy": round(initial_accuracy, 4),
+            "final_accuracy": round(final_accuracy, 4),
             "model_version": version,
             "model_path": self.model_dir
         }
@@ -165,7 +193,7 @@ class ContrastiveTrainer:
         logger.info(f"Re-embedded {count} memories with the fine-tuned model")
         return count
 
-    def _update_training_log(self, num_triplets: int, epochs: int, batch_size: int, memory_count: int, duration: float, learning_rate: float) -> int:
+    def _update_training_log(self, num_triplets: int, epochs: int, batch_size: int, memory_count: int, duration: float, learning_rate: float, initial_accuracy: float = 0.0, final_accuracy: float = 0.0) -> int:
         """Updates the training log with detailed metrics from this run. Returns the new version number."""
         os.makedirs(self.model_dir, exist_ok=True)
 
@@ -186,8 +214,9 @@ class ContrastiveTrainer:
                 "learning_rate": learning_rate
             },
             "performance": {
-                "duration_seconds": round(duration, 1)
-                # "final_loss": "Notcaptured" # Requires callback
+                "duration_seconds": round(duration, 1),
+                "triplet_accuracy_initial": round(initial_accuracy, 4),
+                "triplet_accuracy_final": round(final_accuracy, 4)
             }
         })
 

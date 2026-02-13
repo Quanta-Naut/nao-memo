@@ -172,7 +172,7 @@ class MemoryApp:
         # Step 2: Train
         console.print("\n[bold yellow]Step 2: Training contrastive model...[/bold yellow]")
         with console.status("[bold blue]Fine-tuning MiniLM with TripletLoss...[/bold blue]"):
-            metrics = trainer.train(triplets, epochs=3, batch_size=16)
+            metrics = trainer.train(triplets, epochs=3, batch_size=16, memory_count=len(memories))
 
         if "error" in metrics:
             console.print(f"[red]Training failed: {metrics['error']}[/red]")
