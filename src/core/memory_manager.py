@@ -137,7 +137,7 @@ class MemoryManager:
                 return
 
             # Step 2: Train
-            metrics = trainer.train(triplets, epochs=3, batch_size=16)
+            metrics = trainer.train(triplets, epochs=3, batch_size=16, memory_count=len(memories))
             if "error" in metrics:
                 logger.error(f"Auto-train failed: {metrics['error']}")
                 return

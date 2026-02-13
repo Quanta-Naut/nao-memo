@@ -44,7 +44,7 @@ class ContrastiveTrainer:
         """Checks if a fine-tuned checkpoint exists."""
         return os.path.exists(os.path.join(self.model_dir, "config.json"))
 
-    def train(self, triplets: List[dict], epochs: int = 3, batch_size: int = 16) -> dict:
+    def train(self, triplets: List[dict], epochs: int = 3, batch_size: int = 16, memory_count: int = 0) -> dict:
         """
         Fine-tunes the model using TripletLoss on the provided triplets.
         Warm-starts from previous checkpoint if available.
@@ -53,9 +53,10 @@ class ContrastiveTrainer:
             triplets: List of {"query": str, "positive": str, "negative": str}
             epochs: Number of training epochs
             batch_size: Training batch size
+            memory_count: Total number of memories at the time of training
 
         Returns:
-            dict with training metrics: {"loss", "duration_seconds", "num_triplets", "model_version"}
+            dict with training metrics: {"duration_seconds", "num_triplets", "model_version", ...}
         """
         if self.model is None:
             return {"error": "sentence-transformers not available"}
@@ -97,12 +98,23 @@ class ContrastiveTrainer:
         duration = (datetime.now() - start_time).total_seconds()
 
         # Load training log and update
-        version = self._update_training_log(len(triplets), epochs, duration)
+        learning_rate = 2e-5 # Default for SentenceTransformer
+        version = self._update_training_log(
+            num_triplets=len(triplets),
+            epochs=epochs,
+            batch_size=batch_size,
+            memory_count=memory_count,
+            duration=duration,
+            learning_rate=learning_rate
+        )
 
         metrics = {
             "duration_seconds": round(duration, 1),
             "num_triplets": len(triplets),
             "epochs": epochs,
+            "batch_size": batch_size,
+            "memory_count": memory_count,
+            "learning_rate": learning_rate,
             "model_version": version,
             "model_path": self.model_dir
         }
@@ -153,8 +165,8 @@ class ContrastiveTrainer:
         logger.info(f"Re-embedded {count} memories with the fine-tuned model")
         return count
 
-    def _update_training_log(self, num_triplets: int, epochs: int, duration: float) -> int:
-        """Updates the training log with this training run. Returns the new version number."""
+    def _update_training_log(self, num_triplets: int, epochs: int, batch_size: int, memory_count: int, duration: float, learning_rate: float) -> int:
+        """Updates the training log with detailed metrics from this run. Returns the new version number."""
         os.makedirs(self.model_dir, exist_ok=True)
 
         log = {"runs": []}
@@ -166,9 +178,17 @@ class ContrastiveTrainer:
         log["runs"].append({
             "version": version,
             "timestamp": datetime.now().isoformat(),
+            "memory_count": memory_count,
             "num_triplets": num_triplets,
-            "epochs": epochs,
-            "duration_seconds": round(duration, 1)
+            "training_params": {
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate
+            },
+            "performance": {
+                "duration_seconds": round(duration, 1)
+                # "final_loss": "Notcaptured" # Requires callback
+            }
         })
 
         with open(TRAINING_LOG, 'w') as f:
