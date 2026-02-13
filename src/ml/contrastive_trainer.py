@@ -95,12 +95,16 @@ class ContrastiveTrainer:
 
         # Measure initial accuracy
         initial_metrics = evaluator(self.model)
-        # TripletEvaluator returns accuracy in 'test_accuracy' key usually, but let's check return
-        # Actually evaluator(model) returns correct score (accuracy) directly in recent versions
-        # or we can inspect evaluator.compute_metrices(model)
-        # Let's rely on the return value which is the primary metric (accuracy)
-        initial_accuracy = initial_metrics
-
+        
+        # TripletEvaluator in newer versions returns a float (score), 
+        # but in some it might return a dict. Let's make it safe.
+        initial_accuracy = 0.0
+        if isinstance(initial_metrics, float) or isinstance(initial_metrics, int):
+            initial_accuracy = float(initial_metrics)
+        elif isinstance(initial_metrics, dict):
+            # Try to find accuracy key
+            initial_accuracy = initial_metrics.get('test_accuracy', initial_metrics.get('accuracy', 0.0))
+        
         # Train
         logger.info(f"Starting training: {len(triplets)} triplets, {epochs} epochs")
         logger.info(f"Initial Triplet Accuracy: {initial_accuracy:.4f}")
@@ -118,7 +122,13 @@ class ContrastiveTrainer:
         duration = (datetime.now() - start_time).total_seconds()
         
         # Measure final accuracy
-        final_accuracy = evaluator(self.model)
+        final_metrics = evaluator(self.model)
+        final_accuracy = 0.0
+        if isinstance(final_metrics, float) or isinstance(final_metrics, int):
+            final_accuracy = float(final_metrics)
+        elif isinstance(final_metrics, dict):
+            final_accuracy = final_metrics.get('test_accuracy', final_metrics.get('accuracy', 0.0))
+
         logger.info(f"Final Triplet Accuracy: {final_accuracy:.4f}")
 
         # Load training log and update
