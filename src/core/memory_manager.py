@@ -101,6 +101,31 @@ class MemoryManager:
         else:
             return {"stored": False, "reason": reason, "message": "Memory not stored."}
 
+    def add_memory_direct(self, text: str) -> dict:
+        """
+        Directly adds a memory without LLM validation.
+        Used for bulk import or trusted sources.
+        """
+        try:
+            # Generate embeddings
+            embedding = self.embedding_service.get_embedding(text)
+            
+            # Generate learned embedding if trained model exists
+            learned_emb = None
+            if self.contrastive_trainer and self.contrastive_trainer.is_trained():
+                learned_emb = self.contrastive_trainer.encode([text])[0]
+
+            memory_entry = MemoryEntry(text=text, embedding=embedding, learned_embedding=learned_emb)
+            self.storage_service.add_memory(memory_entry)
+
+            # Check if auto-retrain threshold is reached
+            result = {"stored": True, "reason": "Direct add via bulk import.", "message": "Memory stored."}
+            self._check_auto_retrain(result)
+            return result
+        except Exception as e:
+            logger.error(f"Error adding memory directly: {e}")
+            return {"stored": False, "reason": str(e), "message": "Error adding memory."}
+
     def _check_auto_retrain(self, result: dict):
         """Triggers background retraining if enough new memories have accumulated."""
         if self._is_training:

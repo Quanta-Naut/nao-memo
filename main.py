@@ -197,6 +197,31 @@ class MemoryApp:
 
         Prompt.ask("\nPress Enter to return")
 
+    def add_bulk_memory_flow(self):
+        console.print("[bold green]Bulk Add Memories[/bold green]")
+        console.print("[dim]Enter memories one per line. Type 'done' or 'exit' on a new line to finish.[/dim]")
+        
+        count = 0
+        while True:
+            text = Prompt.ask(f"Memory #{count+1}")
+            if text.lower() in ['done', 'exit']:
+                break
+            
+            if not text.strip():
+                continue
+                
+            with console.status("[bold blue]Storing...[/bold blue]"):
+                result = self.memory_manager.add_memory_direct(text)
+            
+            if result['stored']:
+                console.print(f"[green]✓ Stored[/green]")
+                count += 1
+            else:
+                console.print(f"[red]✗ Failed: {result['reason']}[/red]")
+        
+        console.print(f"\n[bold green]Successfully added {count} memories.[/bold green]")
+        Prompt.ask("\nPress Enter to return")
+
     def run(self):
         while True:
             self.display_header()
@@ -208,10 +233,11 @@ class MemoryApp:
             menu_table.add_row("3", "Chat with Memory")
             menu_table.add_row("4", "Voice Chat")
             menu_table.add_row("5", "Train Retriever (Contrastive Learning)")
-            menu_table.add_row("6", "Exit")
+            menu_table.add_row("6", "Bulk Add Memories (Direct)")
+            menu_table.add_row("7", "Exit")
             console.print(menu_table)
             
-            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6"], default="1")
+            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6", "7"], default="1")
 
             if choice == "1":
                 self.add_memory_flow()
@@ -224,6 +250,8 @@ class MemoryApp:
             elif choice == "5":
                 self.train_retriever_flow()
             elif choice == "6":
+                self.add_bulk_memory_flow()
+            elif choice == "7":
                 console.print("[bold green]Goodbye![/bold green]")
                 break
 
