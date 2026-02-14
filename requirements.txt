@@ -9,3 +9,5 @@ pvporcupine
 pvrecorder
 sentence-transformers
 torch
+
+ollama

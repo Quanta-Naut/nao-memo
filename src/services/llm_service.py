@@ -1,11 +1,23 @@
 import google.generativeai as genai
 from src.core.config import Config
+import ollama
 
 class LLMService:
     def __init__(self):
         Config.validate()
-        genai.configure(api_key=Config.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(Config.GENERATIVE_MODEL)
+        if Config.LLM_PROVIDER == "gemini":
+            genai.configure(api_key=Config.GEMINI_API_KEY)
+            self.model = genai.GenerativeModel(Config.GENERATIVE_MODEL)
+
+    def _generate(self, prompt: str) -> str:
+        """Internal helper to generate content from the configured provider."""
+        if Config.LLM_PROVIDER == "gemini":
+            response = self.model.generate_content(prompt)
+            return response.text.strip()
+        elif Config.LLM_PROVIDER == "ollama":
+            response = ollama.generate(model=Config.OLLAMA_MODEL, prompt=prompt)
+            return response['response'].strip()
+        return ""
 
     def decide_memory_importance(self, text: str) -> tuple[bool, str]:
         """
@@ -30,8 +42,7 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
-            result = response.text.strip()
+            result = self._generate(prompt)
             
             should_store = "DECISION: YES" in result
             reason = result.split("REASON:")[1].strip() if "REASON:" in result else "No reason provided."
@@ -65,8 +76,7 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            return self._generate(prompt)
         except Exception as e:
             return f"I'm having trouble thinking right now. Error: {str(e)}"
 
@@ -100,8 +110,7 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
-            result = response.text.strip()
+            result = self._generate(prompt)
             
             action = "ADD"
             if "ACTION: UPDATE" in result:
