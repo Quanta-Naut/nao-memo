@@ -1,3 +1,6 @@
+
+
+
 import random
 import numpy as np
 import logging
@@ -84,8 +87,7 @@ class TripletService:
         """
 
         try:
-            response = self.llm_service.model.generate_content(prompt)
-            result = response.text.strip()
+            result = self.llm_service.generate_text(prompt)
             queries = [q.strip() for q in result.split('\n') if q.strip()]
             # Take only the requested count
             return queries[:count]

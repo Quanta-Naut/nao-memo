@@ -9,6 +9,12 @@ class LLMService:
             genai.configure(api_key=Config.GEMINI_API_KEY)
             self.model = genai.GenerativeModel(Config.GENERATIVE_MODEL)
 
+    def generate_text(self, prompt: str) -> str:
+        """
+        Public method to generate text using the configured LLM provider.
+        """
+        return self._generate(prompt)
+
     def _generate(self, prompt: str) -> str:
         """Internal helper to generate content from the configured provider."""
         if Config.LLM_PROVIDER == "gemini":
